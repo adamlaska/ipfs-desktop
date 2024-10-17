@@ -8,8 +8,9 @@ const { STATUS } = require('./consts')
 const createDaemon = require('./daemon')
 const ipcMainEvents = require('../common/ipc-main-events')
 const { analyticsKeys } = require('../analytics/keys')
+const getCtx = require('../context')
 
-module.exports = async function (ctx) {
+async function setupDaemon () {
   let ipfsd = null
   let status = null
   let wasOnline = null
@@ -25,7 +26,7 @@ module.exports = async function (ctx) {
     }
 
     if (!ipfsd) {
-      await ipfsNotRunningDialog(ctx)
+      await ipfsNotRunningDialog()
     }
 
     return ipfsd
@@ -63,7 +64,7 @@ module.exports = async function (ctx) {
     // not set.
     if (!config.path || typeof config.path !== 'string') {
       config.path = ipfsd.path
-      store.set('ipfsConfig', config)
+      store.safeSet('ipfsConfig', config)
     }
 
     log.end()
@@ -101,13 +102,12 @@ module.exports = async function (ctx) {
     await stopIpfs()
     await startIpfs()
   }
+  getCtx().setProp('startIpfs', runAndStatus(startIpfs))
+  getCtx().setProp('stopIpfs', runAndStatus(stopIpfs))
+  getCtx().setProp('restartIpfs', runAndStatus(restartIpfs))
+  getCtx().setProp('getIpfsd', getIpfsd)
 
-  ctx.startIpfs = runAndStatus(startIpfs)
-  ctx.stopIpfs = runAndStatus(stopIpfs)
-  ctx.restartIpfs = runAndStatus(restartIpfs)
-  ctx.getIpfsd = getIpfsd
-
-  ipcMain.on('ipfsConfigChanged', restartIpfs)
+  ipcMain.on(ipcMainEvents.IPFS_CONFIG_CHANGED, restartIpfs)
 
   app.on('before-quit', async () => {
     if (ipfsd) await stopIpfs()
@@ -115,7 +115,7 @@ module.exports = async function (ctx) {
 
   await startIpfs()
 
-  ipcMain.on('online-status-changed', (_, isOnline) => {
+  ipcMain.on(ipcMainEvents.ONLINE_STATUS_CHANGED, (_, isOnline) => {
     if (wasOnline === false && isOnline && ipfsd) {
       restartIpfs()
     }
@@ -124,4 +124,5 @@ module.exports = async function (ctx) {
   })
 }
 
+module.exports = setupDaemon
 module.exports.STATUS = STATUS

@@ -3,6 +3,7 @@ const { ipcRenderer, contextBridge } = require('electron')
 const screenshotHook = require('./screenshot')
 const connectionHook = require('./connection-status')
 const { COUNTLY_KEY, VERSION } = require('../common/consts')
+const ipcMainEvents = require('../common/ipc-main-events')
 
 screenshotHook()
 connectionHook()
@@ -57,7 +58,7 @@ contextBridge.exposeInMainWorld('ipfsDesktop', {
    * @param {import('countly-sdk-nodejs').ConsentFeatures} consent
    */
   removeConsent: (consent) => {
-    ipcRenderer.send('countly.removeConsent', consent)
+    ipcRenderer.send(ipcMainEvents.COUNTLY_REMOVE_CONSENT, consent)
   },
 
   /**
@@ -65,13 +66,16 @@ contextBridge.exposeInMainWorld('ipfsDesktop', {
    * @param {import('countly-sdk-nodejs').ConsentFeatures} consent
    */
   addConsent: (consent) => {
-    ipcRenderer.send('countly.addConsent', consent)
+    ipcRenderer.send(ipcMainEvents.COUNTLY_ADD_CONSENT, consent)
   },
 
   updateLanguage: (language) => {
-    ipcRenderer.send('updateLanguage', language)
+    ipcRenderer.send(ipcMainEvents.LANG_UPDATED, language)
   }
 })
 
 // Inject api address
-window.localStorage.setItem('ipfsApi', urlParams.get('api'))
+const apiAddress = urlParams.get('api')
+if (apiAddress != null) {
+  window.localStorage.setItem('ipfsApi', apiAddress)
+}

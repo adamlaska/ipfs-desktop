@@ -4,6 +4,7 @@ const mockStore = require('./mocks/store')
 const mockLogger = require('./mocks/logger')
 const proxyquire = require('proxyquire').noCallThru()
 const { test, expect } = require('@playwright/test')
+const ipcMainEvents = require('../../src/common/ipc-main-events')
 
 test.describe('Create toggler', () => {
   const option = 'OPT'
@@ -16,8 +17,11 @@ test.describe('Create toggler', () => {
     createToggler = proxyquire('../../src/utils/create-toggler', {
       electron: electron,
       '../common/logger': logger,
-      '../common/store': store
+      '../common/store': store,
+      './safe-store-set': (key, val, onSuccess) => { store.set(key, val); onSuccess() }
     })
+    sinon.spy(store, 'get')
+    sinon.spy(store, 'set')
   })
 
   test('activate option with success', async () => {
@@ -25,7 +29,7 @@ test.describe('Create toggler', () => {
     const activate = sinon.stub().returns(true)
     createToggler(option, activate)
 
-    electron.ipcMain.on('configUpdated', spy)
+    electron.ipcMain.on(ipcMainEvents.CONFIG_UPDATED, spy)
     await electron.ipcMain.emit(`toggle_${option}`)
 
     expect(store.get.callCount).toEqual(1)
@@ -41,7 +45,7 @@ test.describe('Create toggler', () => {
     const activate = sinon.stub().returns(false)
     createToggler(option, activate)
 
-    electron.ipcMain.on('configUpdated', spy)
+    electron.ipcMain.on(ipcMainEvents.CONFIG_UPDATED, spy)
     await electron.ipcMain.emit(`toggle_${option}`)
 
     expect(store.get.callCount).toEqual(1)
@@ -57,7 +61,7 @@ test.describe('Create toggler', () => {
     const activate = sinon.stub().returns(true)
     createToggler(option, activate)
 
-    electron.ipcMain.on('configUpdated', spy)
+    electron.ipcMain.on(ipcMainEvents.CONFIG_UPDATED, spy)
     await electron.ipcMain.emit(`toggle_${option}`)
 
     expect(store.get.callCount).toEqual(1)
@@ -73,7 +77,7 @@ test.describe('Create toggler', () => {
     const activate = sinon.stub().returns(false)
     createToggler(option, activate)
 
-    electron.ipcMain.on('configUpdated', spy)
+    electron.ipcMain.on(ipcMainEvents.CONFIG_UPDATED, spy)
     await electron.ipcMain.emit(`toggle_${option}`)
 
     expect(store.get.callCount).toEqual(1)
@@ -87,8 +91,8 @@ test.describe('Create toggler', () => {
     const activate = sinon.stub().returns(true)
 
     createToggler(option, activate)
-    electron.ipcMain.emit(`toggle_${option}`)
-    await electron.ipcMain.emit(`toggle_${option}`)
+    electron.ipcMain.emit(ipcMainEvents.TOGGLE(option))
+    await electron.ipcMain.emit(ipcMainEvents.TOGGLE(option))
 
     expect(store.get.callCount).toEqual(2)
     expect(activate.callCount).toEqual(2)

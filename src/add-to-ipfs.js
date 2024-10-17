@@ -7,6 +7,7 @@ const fs = require('fs-extra')
 const logger = require('./common/logger')
 const { notify, notifyError } = require('./common/notify')
 const { analyticsKeys } = require('./analytics/keys')
+const getCtx = require('./context')
 
 async function copyFileToMfs (ipfs, cid, filename) {
   let i = 0
@@ -38,9 +39,9 @@ async function getShareableCid (ipfs, files) {
   // Note: we don't use 'object patch' here, it was deprecated.
   // We are using MFS for creating CID of an ephemeral directory
   // because it handles HAMT-sharding of big directories automatically
-  // See: https://github.com/ipfs/go-ipfs/issues/8106
+  // See: https://github.com/ipfs/kubo/issues/8106
   const dirpath = `/zzzz_${Date.now()}`
-  await ipfs.files.mkdir(dirpath, {})
+  await ipfs.files.mkdir(dirpath, { cidVersion: 1 })
 
   for (const { cid, filename } of files) {
     await ipfs.files.cp(`/ipfs/${cid}`, `${dirpath}/${filename}`)
@@ -76,6 +77,7 @@ function sendNotification (launchWebUI, hasFailures, successCount, filename) {
     body = i18n.t('itemsFailedNotification.message')
   }
 
+  // @ts-expect-error
   fn({ title, body }, () => {
     // force refresh for Files screen to pick up newly added items
     // https://github.com/ipfs/ipfs-desktop/issues/1763
@@ -88,12 +90,19 @@ async function addFileOrDirectory (ipfs, filepath) {
   let cid = null
 
   if (stat.isDirectory()) {
-    const files = globSource(filepath, '**/*', { recursive: true })
-    const res = await last(ipfs.addAll(files, { pin: false, wrapWithDirectory: true }))
+    const files = globSource(filepath, '**/*', { recursive: true, cidVersion: 1 })
+    const res = await last(ipfs.addAll(files, {
+      pin: false,
+      wrapWithDirectory: true,
+      cidVersion: 1
+    }))
     cid = res.cid
   } else {
     const readStream = fs.createReadStream(filepath)
-    const res = await ipfs.add(readStream, { pin: false })
+    const res = await ipfs.add(readStream, {
+      pin: false,
+      cidVersion: 1
+    })
     cid = res.cid
   }
 
@@ -102,7 +111,9 @@ async function addFileOrDirectory (ipfs, filepath) {
   return { cid, filename }
 }
 
-module.exports = async function ({ getIpfsd, launchWebUI }, files) {
+module.exports = async function (files) {
+  const ctx = getCtx()
+  const getIpfsd = await ctx.getProp('getIpfsd')
   const ipfsd = await getIpfsd()
   if (!ipfsd) {
     return
@@ -129,6 +140,7 @@ module.exports = async function ({ getIpfsd, launchWebUI }, files) {
   }
 
   const { cid, filename } = await getShareableCid(ipfsd.api, successes)
+  const launchWebUI = ctx.getFn('launchWebUI')
   sendNotification(launchWebUI, failures.length !== 0, successes.length, filename)
 
   const query = filename ? `?filename=${encodeURIComponent(filename)}` : ''
